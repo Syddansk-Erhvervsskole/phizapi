@@ -1,0 +1,6 @@
+@phizapi_HostAddress = http://localhost:5119
+
+GET {{phizapi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
