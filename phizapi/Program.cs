@@ -78,7 +78,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddSingleton<JwtTokenService>();
-
+builder.Services.AddSingleton<EncryptionService>();
+builder.Services.AddSingleton<FtpService>();
 
 var app = builder.Build();
 
@@ -87,6 +88,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage(); // Only use in dev if you want
 }
 
 app.UseHttpsRedirection();
