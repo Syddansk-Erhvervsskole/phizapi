@@ -6,10 +6,12 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 using phizapi.Services;
+using System;
 using System.Drawing;
 using System.Net;
 using System.Net.Mime;
 using XAct;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace phizapi.Controllers
 {
@@ -20,26 +22,24 @@ namespace phizapi.Controllers
 
         private readonly FtpService _ftpService;
         private readonly InferenceSession _session;
-        public ImageController(FtpService ftpService)
+        private readonly MongoDBService _dbService;
+        public ImageController(FtpService ftpService, MongoDBService dbService)
         {
             _ftpService = ftpService;
-
+            _dbService = dbService;
             _session = new InferenceSession("facenet.onnx");
         }
 
-        [HttpGet("Checksim/{ImageID1}/{ImageID2}")]
-        [Authorize]
-        public async Task<IActionResult> CheckSim(string ImageID1, string ImageID2)
+        [HttpGet("List")]
+        [Authorize(Roles = "Admin")]
+        public IActionResult List()
         {
             try
             {
-                var images = MongoDBService.GetList<ImageObject>("Images");
+                var images = _dbService.GetList<ImageObjectSimple>("Images");
 
 
-                var image = images.FirstOrDefault(x => x.id == ImageID1);
-                var image2 = images.FirstOrDefault(x => x.id == ImageID2);
-
-                return Ok(ImageObject.CosineSimilarity(image.embedding, image2.embedding));
+                return Ok(images);
             }
             catch (WebException ex)
             {
@@ -47,13 +47,13 @@ namespace phizapi.Controllers
             }
         }
 
-        [HttpGet("List")]
-        [Authorize]
-        public async Task<IActionResult> List()
+        [HttpGet("List/Full")]
+        [Authorize(Roles = "Admin")]
+        public IActionResult ListFull()
         {
             try
             {
-                var images = MongoDBService.GetList<ImageObject>("Images");
+                var images = _dbService.GetList<ImageObject>("Images");
 
 
                 return Ok(images);
@@ -65,12 +65,12 @@ namespace phizapi.Controllers
         }
 
         [HttpGet("List/Embeddings")]
-        [Authorize]
-        public async Task<IActionResult> ListEmbeddings()
+        [Authorize(Roles = "Admin")]
+        public IActionResult ListEmbeddings()
         {
             try
             {
-                var images = MongoDBService.GetList<EmbeddingsImage>("Images");
+                var images = _dbService.GetList<EmbeddingsImage>("Images");
 
                 return Ok(images);
             }
@@ -82,7 +82,7 @@ namespace phizapi.Controllers
 
 
         [HttpGet("View/{fileName}")]
-        [Authorize]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ViewFile(string fileName)
         {
             try
@@ -108,12 +108,12 @@ namespace phizapi.Controllers
         }
 
         [HttpGet("{id}")]
-        [Authorize]
-        public async Task<IActionResult> Get(string id)
+        [Authorize(Roles = "Admin")]
+        public IActionResult Get(string id)
         {
             try
             {
-                var image = MongoDBService.GetCollection<ImageObject>("Images").Find(x => x.id == id).FirstOrDefault();
+                var image = _dbService.GetCollection<ImageObject>("Images").Find(x => x.id == id).FirstOrDefault();
                 
                 if(image != null)
                 {
@@ -128,8 +128,9 @@ namespace phizapi.Controllers
             }
         }
 
+
         [HttpPost()]
-        [Authorize(Roles = "Admin" )]
+        [Authorize(Roles = "Admin,Device" )]
         public async Task<IActionResult> Upload(IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -154,9 +155,12 @@ namespace phizapi.Controllers
             }
 
 
-            var matchingEmbbedings = MongoDBService.GetCollection<EmbeddingsImage>("Images").Find(x => ImageObject.CosineSimilarity(x.embedding, embedding) > 0.8).ToList().OrderByDescending(x => ImageObject.CosineSimilarity(x.embedding, embedding));
+            var matchingEmbbedings = _dbService
+                .GetList<EmbeddingsImage>("Images")
+                .Where(x => !string.IsNullOrEmpty(x.person) && ImageObject.CosineSimilarity(x.embedding, embedding) > 0.8)
+                .OrderByDescending(x => ImageObject.CosineSimilarity(x.embedding, embedding));
 
-            var person = matchingEmbbedings.FirstOrDefault(x => !string.IsNullOrEmpty(x.person))?.person;
+            var person = matchingEmbbedings.FirstOrDefault()?.person;
 
             var imageObject = new ImageObject()
             {
@@ -173,20 +177,18 @@ namespace phizapi.Controllers
                 embedding = embedding
             };
 
-            
-      
 
             try
             {
-                MongoDBService.Upload(imageObject, "Images");
+                _dbService.Upload(imageObject, "Images");
 
                 await _ftpService.CreateFileAsync(file, $"{id}{extension}");
 
-                return Ok(new { file.FileName, imageObject.url, message = "Uploaded to FTP successfully" });
+                return Ok(new { image = imageObject });
             }
             catch (Exception ex)
             {
-                MongoDBService.Remove(imageObject, "Images");
+                _dbService.Remove(imageObject, "Images");
               
                 return StatusCode(500, $"FTP upload failed: {ex.Message}");
             }
@@ -199,20 +201,53 @@ namespace phizapi.Controllers
         }
 
 
+        [HttpPatch("{id}/Update/Person")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdatePerson([FromBody]ImagePersonUpdate personUpdate, string id)
+        {
+            try
+            {
+                var collection = _dbService.GetCollection<ImageObject>("Images");
+                var image = collection.Find(x => x.id == id).FirstOrDefault();
+                var person = _dbService.GetCollection<Person>("Persons").Find(x => x.id == personUpdate.person_id).FirstOrDefault();
 
-  
+                if (image != null && person != null)
+                {
+
+                    if (person != null)
+                    {
+                        collection.UpdateOne(X => X.id == id, Builders<ImageObject>.Update
+                        .Set(u => u.person, person.id));
+                    }
+                    else
+                    {
+                        return NotFound("Image or person not found");
+                    }
+
+                    image.person = person.id;
+                    return Ok(new { image });
+                }
+                return NotFound();
+
+            }
+            catch (WebException ex)
+            {
+                return Problem($"An error occured. Message: {ex.Message}");
+            }
+        }
+
 
         [HttpDelete("{id}")]
-        [Authorize]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteFile(string id)
         {
             try
             {
-                var imageObject = MongoDBService.GetList<ImageObject>("Images").FirstOrDefault(x => x.id == id);
+                var imageObject = _dbService.GetList<ImageObject>("Images").FirstOrDefault(x => x.id == id);
                 
                 if (imageObject != null)
                 {
-                    MongoDBService.Remove(imageObject, "Images");
+                    _dbService.Remove(imageObject, "Images");
                 }
                 else
                 {
@@ -228,7 +263,7 @@ namespace phizapi.Controllers
                 }
                 catch (WebException ex)
                 {
-                    MongoDBService.Upload(imageObject, "Images");
+                    _dbService.Upload(imageObject, "Images");
                     return Problem($"Failed to remove file from ftp");
                 }
             }
@@ -253,6 +288,22 @@ namespace phizapi.Controllers
         public float[] embedding { get; set; }
     }
 
+    public class ImagePersonUpdate
+    {
+        public string person_id { get; set; }
+
+    }
+
+    [BsonIgnoreExtraElements]
+    public class ImageObjectSimple
+    {
+        public string id { get; set; }
+        public string original_name { get; set; }
+        public string url { get; set; }
+        public string filetype { get; set; }
+        public DateTime createdTime { get; set; }
+        public string? person { get; set; }
+    }
     public class ImageObject
     {
         public string id { get; set; }
