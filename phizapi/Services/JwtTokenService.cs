@@ -16,7 +16,7 @@ namespace phizapi.Services
             _config = config;
         }
 
-        public string GenerateToken(string username, string role)
+        public string GenerateToken(string username, string role, int expires = 1)
         {
             var claims = new[]
             {
@@ -31,7 +31,7 @@ namespace phizapi.Services
                 issuer: _config["Jwt:Issuer"],
                 audience: _config["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(1),
+                expires: DateTime.UtcNow.AddHours(expires),
                 signingCredentials: creds);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
