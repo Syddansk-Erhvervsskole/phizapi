@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using phizapi.Services;
@@ -48,6 +49,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    c.SupportNonNullableReferenceTypes();
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "phizapi", Version = "v1" });
 
     // Add JWT Authentication
@@ -80,6 +82,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton<EncryptionService>();
 builder.Services.AddSingleton<FtpService>();
+builder.Services.AddSingleton<MongoDBService>();
 
 var app = builder.Build();
 
