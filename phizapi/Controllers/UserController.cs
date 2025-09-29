@@ -17,18 +17,21 @@ namespace phizapi.Controllers
         private readonly EncryptionService _es;
 
         private readonly JwtTokenService _jwt;
+        private readonly MongoDBService _dBService;
 
-        public UserController(JwtTokenService jwt, EncryptionService es)
+        public UserController(JwtTokenService jwt, EncryptionService es, MongoDBService dBService)
         {
             _jwt = jwt;
             _es = es;
+            _dBService = dBService;
         }
 
         [HttpGet("List")]
+        [Authorize(Roles = "Admin")]
         public IActionResult GetAll()
         {
 
-            return Ok(MongoDBService.GetList<UserList>("Users"));
+            return Ok(_dBService.GetList<UserList>("Users"));
         }
 
         [HttpPost("Login")]
@@ -38,7 +41,7 @@ namespace phizapi.Controllers
             {
                 var sha256Password = _es.Sha256(request.password);
 
-                var mongouser = MongoDBService.GetList<User>("Users").FirstOrDefault(x => x.username == request.username && x.password == sha256Password);
+                var mongouser = _dBService.GetList<User>("Users").FirstOrDefault(x => x.username == request.username && x.password == sha256Password);
                 if (mongouser != null)
                 {
                     var token = _jwt.GenerateToken(mongouser.username, mongouser.role.ToString());
@@ -64,11 +67,12 @@ namespace phizapi.Controllers
         }
 
         [HttpPost("Register")]
+        [Authorize(Roles = "Admin")]
         public IActionResult Register([FromBody] LoginRequest request)
         {
             try
             {
-                var mongoUsers = MongoDBService.GetList<User>("Users");
+                var mongoUsers = _dBService.GetList<User>("Users");
 
             
                 if(mongoUsers.Any(u => u.username == request.username))
@@ -84,7 +88,7 @@ namespace phizapi.Controllers
                     password = sha256Password
                 };
 
-                MongoDBService.Upload<User>(user, "Users");
+                _dBService.Upload<User>(user, "Users");
 
                 return Ok(new { message = "User registered successfully" });
             }
@@ -98,7 +102,7 @@ namespace phizapi.Controllers
     
 
         [HttpPost("Verify")]
-        [Authorize]
+        [Authorize(Roles = "Admin")]
         public IActionResult Verify()
         {
             return Ok(new { message = "Token is valid" });
@@ -117,7 +121,7 @@ namespace phizapi.Controllers
         {
             try
             {
-                MongoDBService.GetCollection<User>("Users").UpdateOne(X => X.id == update.user_id, Builders<User>.Update
+                _dBService.GetCollection<User>("Users").UpdateOne(X => X.id == update.user_id, Builders<User>.Update
                 .Set(u => u.role, update.value));
 
 
@@ -137,7 +141,7 @@ namespace phizapi.Controllers
             try
             {
 
-                MongoDBService.GetCollection<User>("Users").DeleteOne(X => X.id == id);
+                _dBService.GetCollection<User>("Users").DeleteOne(X => X.id == id);
 
 
                 return Ok(new { message = "User deleted successfully" });
