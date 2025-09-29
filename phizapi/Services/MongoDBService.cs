@@ -1,20 +1,28 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Configuration;
+using System.Net;
 
 namespace phizapi.Services
 {
     public class MongoDBService
     {
-        static string connectionString = "mongodb+srv://Admin:OlJHF17jm81paCWW@phizrecondb.1sfrmel.mongodb.net/";
-        public static List<T> GetList<T>(string collection)
+
+        private IMongoDatabase database;
+        private IConfiguration _config;
+
+        public MongoDBService(IConfiguration config)
         {
-            // Connection string (replace with your MongoDB URI)
+            _config = config;
+            var settings = MongoClientSettings.FromConnectionString(_config["MongoDB:ConnectionString"]);
+            settings.ServerApi = new ServerApi(ServerApiVersion.V1);
 
-            var client = new MongoClient(connectionString);
+            var client = new MongoClient(settings);
+            database = client.GetDatabase("PhizRecon");
+        }
 
-            // Access a specific database (it will create it if it doesn't exist)
-            var database = client.GetDatabase("PhizRecon");
+        public List<T> GetList<T>(string collection)
+        {
 
             // Access a collection (like a table)
             var collectionValue = database.GetCollection<T>(collection);
@@ -22,22 +30,17 @@ namespace phizapi.Services
             return collectionValue.Find(Builders<T>.Filter.Empty).ToList();
             
         }
-        public static IMongoCollection<T> GetCollection<T>(string collection)
+        public IMongoCollection<T> GetCollection<T>(string collection)
         {
-
-            var client = new MongoClient(connectionString);
-
-            var database = client.GetDatabase("PhizRecon");
 
            return database.GetCollection<T>(collection);
 
         }
 
 
-        public static void Remove<T>(T elem, string collectionName)
+        public void Remove<T>(T elem, string collectionName)
         {
-            var client = new MongoClient(connectionString);
-            var database = client.GetDatabase("PhizRecon");
+
             var collection = database.GetCollection<T>(collectionName);
 
  
@@ -52,12 +55,8 @@ namespace phizapi.Services
         }
 
 
-        public static void Upload<T>(T elem, string collection)
+        public void Upload<T>(T elem, string collection)
         {
-
-            var client = new MongoClient(connectionString);
-
-            var database = client.GetDatabase("PhizRecon");
 
             var collectionValue = database.GetCollection<T>(collection);
            
