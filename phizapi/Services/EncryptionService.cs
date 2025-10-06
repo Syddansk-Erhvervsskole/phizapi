@@ -14,7 +14,7 @@ namespace phizapi.Services
         }
         public string Sha256(string input)
         {
-            string key = _config["Sha256:Key"];  // hardcoded
+            string key = _config["Sha256:Key"];
             string combined = key + input;
 
             using (var sha256 = SHA256.Create())
