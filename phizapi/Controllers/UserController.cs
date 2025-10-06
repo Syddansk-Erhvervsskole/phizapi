@@ -155,49 +155,10 @@ namespace phizapi.Controllers
     }
 
 
-    public class LoginRequest
-    {
-        public string username { get; set; } = "";
-        public string password { get; set; } = "";
-    }
+ 
 
-    public class UserUpdate<T>
-    {
-        public string  user_id { get; set; }
 
-        public T value { get; set; }
+ 
 
-        public DateTime updated_at = DateTime.Now;
-    }
 
-    public class User
-    {
-        public string id { get; set; } = Guid.NewGuid().ToString();
-        public string username { get; set; } = "";
-        public string password { get; set; } = "";
-        public Role role { get; set; } = Role.User;
-        public DateTime created_at { get; set; } = DateTime.UtcNow;
-        public DateTime updated_at { get; set; } = DateTime.UtcNow;
-        public List<CustomData> custom_data { get; set; } = new List<CustomData>();
-
-    }
-
-    [BsonIgnoreExtraElements]
-    public class UserList
-    {
-        public string id { get; set; }
-        public string username { get; set; }
-        public Role role { get; set; }
-    }
-
-    public enum Role
-    {
-        Admin,
-        User,
-    }
-    public class CustomData
-    {
-        string key{ get; set; } = "";
-        object value{ get; set; }
-    }
 }

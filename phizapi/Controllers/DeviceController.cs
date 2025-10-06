@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.ML.OnnxRuntime;
 using MongoDB.Driver;
+using phizapi.Models.Device;
 using phizapi.Services;
 using System.Net;
 using XAct.Messages;
@@ -79,38 +80,6 @@ namespace phizapi.Controllers
         }
 
 
-        public class DeviceLoginRequest()
-        {
-            public string mac_address { get; set; }
-        }
 
-        public class CreateDevice
-        {
-            public string name { get; set; }
-            public string description { get; set; }
-            public string ip { get; set; }
-            public string mac { get; set; }
-
-            public Device Getdevice(EncryptionService es)
-            {
-                return new Device()
-                {
-                    name = name,
-                    description = description,
-                    ip = ip,
-                    mac = es.Sha256(mac) 
-                };
-            }
-        }
-
-        public class Device
-        {
-
-            public string id { get; set; } = Guid.NewGuid().ToString();
-            public string name { get; set; }
-            public string description { get; set; }
-            public string ip { get; set; }
-            public string mac { get; set; }
-        }
     }
 }

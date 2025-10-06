@@ -3,9 +3,12 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using phizapi.Services;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net.WebSockets;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -42,6 +45,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
     });
+
 // Add services to the container.
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
@@ -94,7 +98,99 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage(); // Only use in dev if you want
 }
 
-app.UseHttpsRedirection();
+app.UseWebSockets();
+
+app.Map("/ws", builder =>
+{
+    builder.Run(async context =>
+    {
+        if (!context.WebSockets.IsWebSocketRequest)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        // Get token from query string
+        var token = context.Request.Query["token"].ToString();
+        if (string.IsNullOrEmpty(token))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        // Verify token
+        if (!VerifyJwtToken(token, context.RequestServices))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        using var clientSocket = await context.WebSockets.AcceptWebSocketAsync();
+
+        // Connect to Python WS server
+        using var serverSocket = new ClientWebSocket();
+        await serverSocket.ConnectAsync(new Uri("ws://10.130.56.21:3000"), CancellationToken.None);
+
+        var buffer = new byte[4096];
+
+        var relayClientToServer = Task.Run(async () =>
+        {
+            while (clientSocket.State == WebSocketState.Open)
+            {
+                var result = await clientSocket.ReceiveAsync(buffer, CancellationToken.None);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    break;
+
+                await serverSocket.SendAsync(buffer.AsMemory(0, result.Count),
+                    result.MessageType, result.EndOfMessage, CancellationToken.None);
+            }
+        });
+
+        var relayServerToClient = Task.Run(async () =>
+        {
+            while (serverSocket.State == WebSocketState.Open)
+            {
+                var result = await serverSocket.ReceiveAsync(buffer, CancellationToken.None);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    break;
+
+                await clientSocket.SendAsync(buffer.AsMemory(0, result.Count),
+                    result.MessageType, result.EndOfMessage, CancellationToken.None);
+            }
+        });
+
+        await Task.WhenAny(relayClientToServer, relayServerToClient);
+    });
+});
+
+bool VerifyJwtToken(string token, IServiceProvider services)
+{
+    var config = services.GetRequiredService<IConfiguration>();
+    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]));
+
+    var tokenHandler = new JwtSecurityTokenHandler();
+    try
+    {
+        tokenHandler.ValidateToken(token, new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ValidateIssuer = true,
+            ValidIssuer = config["Jwt:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = config["Jwt:Audience"],
+            ClockSkew = TimeSpan.Zero
+        }, out SecurityToken validatedToken);
+
+        return true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+//app.UseHttpsRedirection();
 
 app.UseCors("AllowAll");
 

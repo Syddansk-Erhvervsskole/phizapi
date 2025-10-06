@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
+using phizapi.Models.Image;
+using phizapi.Models.Person;
 using phizapi.Services;
 
 namespace phizapi.Controllers
@@ -132,7 +134,7 @@ namespace phizapi.Controllers
 
         [HttpDelete("")]
         [Authorize(Roles = "Admin")]
-        public IActionResult Remove([FromBody]RemoveImage body)
+        public IActionResult Remove([FromBody] RemovePerson body)
         {
 
             try
@@ -141,7 +143,7 @@ namespace phizapi.Controllers
 
                 var imageCollection = _dbService.GetCollection<ImageObject>("Images");
 
-                if (body.RemoveAllImages)
+                if (body.DeleteAllImages)
                 {
                     _dbService.GetCollection<ImageObject>("Images").DeleteMany(x => x.person == body.id);
                 }
@@ -162,30 +164,5 @@ namespace phizapi.Controllers
     }
 
 
-    public class RemoveImage
-    {
-        public string id { get; set; }
-
-        public bool RemoveAllImages { get; set; }
-    }
-
-    public class Person
-    {
-        public string id { get; set; } = Guid.NewGuid().ToString();
-        public string name { get; set; } = null!;
-        public List<CustomDetails> custom_details { get; set; } = new List<CustomDetails>();
-    }
-    public class CreatePerson
-    {
-        public string name { get; set; } = "";
-    }
-    public class CustomDetails
-    {
-        public string field_name { get; set; }
-        public string value { get; set; }
-    }
-    public class CustomDetailsRemove
-    {
-        public string field_name { get; set; }
-    }
+    
 }
