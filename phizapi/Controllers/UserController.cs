@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
+using phizapi.Models.User;
 using phizapi.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
